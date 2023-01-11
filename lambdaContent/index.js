@@ -42,7 +42,7 @@ async function insertDbRecord(formBody) {
 
     // send write command to the DB and handle optional error
     try {
-        const data = await dbClient.send(command)
+        await dbClient.send(command)
         console.log('Successfully written')
     } catch (err) {
         console.error(err)
