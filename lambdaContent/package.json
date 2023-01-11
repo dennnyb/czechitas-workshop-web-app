@@ -1,0 +1,9 @@
+{
+  "name": "lambdacontent",
+  "version": "1.0.0",
+  "description": "Anthology/Czechitas workshop sample app lambda.",
+  "main": "index.js",
+  "dependencies": {
+    "aws-sdk": "2.1222.0"
+  }
+}
