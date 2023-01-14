@@ -1,50 +1,76 @@
-const fs = require('fs')
-// Create the DynamoDB service client module
-const {DynamoDBClient, ExecuteStatementCommand} = require('@aws-sdk/client-dynamodb')
-// Set the AWS Region.
-const REGION = 'us-east-1'
-// Create an Amazon DynamoDB service client object.
-const dbClient = new DynamoDBClient({region: REGION})
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, ScanCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+const client = new DynamoDBClient();
+const docClient = DynamoDBDocumentClient.from(client);
 
-exports.handler = async (event, context) => {
+const htmlTemplate = `<html>
+  <body>
+    <h1>Items in DynamoDB Table</h1>
+    <form action='/' method='post'>
+      <label>
+        Name:
+        <input type='text' name='name'/>
+      </label>
+      <input type='submit' value='Submit'/>
+    </form>
+    <ul>
+      {{items}}
+    </ul>
+  </body>
+</html>`;
 
-    return pageRouter(event.httpMethod, event.queryStringParameters, event.body)
-}
-
-async function pageRouter(httpMethod, queryString, formBody) {
-
-    if (httpMethod === 'GET') {
-        let htmlContent = fs.readFileSync('contactus.html').toString()
-        return {
-            'statusCode': 200, headers: {'Content-Type': "text/html"}, body: htmlContent
-        }
-    }
-
-    if (httpMethod === 'POST') {
-        await insertDbRecord(formBody)
-        let htmlContent = fs.readFileSync("confirm.html").toString()
-        return {
-            'statusCode': 200, headers: {'Content-Type': "text/html"}, body: htmlContent
-        }
-    }
-}
-
-async function insertDbRecord(formBody) {
-    // Replace HTTP format to PartiQL format
-    formBody = formBody.replaceAll("=", "' : '")
-    formBody = formBody.replaceAll("&", "', '")
-    let formBodyToWrite = `INSERT INTO acmyapp value {'${formBody}'}`
-
+export const handler = async (event) => {
+  console.debug(event);
+  const methodType = event.requestContext.http.method;
+  if (methodType === 'GET') {
     const params = {
-        TableName: 'acmyapp', Statement: formBodyToWrite
-    }
-    const command = new ExecuteStatementCommand(params)
-
-    // send write command to the DB and handle optional error
+      TableName: 'todo'
+    };
     try {
-        await dbClient.send(command)
-        console.log('Successfully written')
-    } catch (err) {
-        console.error(err)
+      const result = await client.send(new ScanCommand(params));
+      const items = result.Items.map(item => `<li>${item.name}</li>`).join('');
+      const html = htmlTemplate.replace('{{items}}', items);
+      return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'text/html' },
+        body: html
+      };
+    } catch (error) {
+      return {
+        statusCode: 500,
+        body: JSON.stringify(error)
+      };
     }
-}
+  } else if (methodType === 'POST') {
+    const body = atob(event.body);
+    console.debug(body);
+    const name = body.split('=')[1];
+    console.debug(name);
+    const params = {
+      TableName: 'todo',
+      Item: {
+        name: name
+      }
+    };
+    try {
+      await client.send(new PutCommand(params));
+      return {
+        statusCode: 302,
+        headers: {
+          Location: "/" 
+        }
+      };
+    } catch (error) {
+      console.debug(error);
+      return {
+        statusCode: 500,
+        body: JSON.stringify(error)
+      };
+    }
+  } else {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: 'Unsupported method' })
+    };
+  }
+};
